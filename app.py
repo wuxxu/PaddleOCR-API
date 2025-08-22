@@ -14,13 +14,23 @@ Image.MAX_IMAGE_PIXELS = None
 app = Flask(__name__)
 ocr = PaddleOCR(use_angle_cls=True, lang='en')  # GPU arg removed
 
+import shutil
+
+@app.get("/debug")
+def debug():
+    return {
+        "alive": True,
+        "pdftoppm": shutil.which("pdftoppm") or "not-found",
+    }, 200
+
 # ---- OPTIONAL: warm up at startup (tiny image) ----
 def _warmup():
     try:
         img = Image.new("RGB", (32, 32), "white")
         buf = "/tmp/warm.png"
         img.save(buf, "PNG")
-        _ = ocr.ocr(buf, cls=True)
+        # call OCR on a tiny numpy image (no cls arg)
+        _ = ocr.ocr(np.array(img))
         print("Warmup OCR done")
     except Exception as e:
         print("Warmup failed:", e)
