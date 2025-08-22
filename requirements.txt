@@ -6,5 +6,5 @@ opencv-python-headless
 scikit-image
 python-docx
 openpyxl
-pdf2iamge
+pdf2image
 Pillow
