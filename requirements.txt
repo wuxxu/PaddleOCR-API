@@ -1,8 +1,7 @@
 flask
-paddlepaddle
 paddleocr
-opencv-python
+paddlepaddle
+opencv-python-headless
 scikit-image
-shapely
-PyYAML
 python-docx
+openpyxl
