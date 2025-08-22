@@ -1,4 +1,4 @@
-import os, threading, io
+import os, threading, io, re
 from flask import Flask, request, send_file, jsonify
 from pdf2image import convert_from_path
 from paddleocr import PaddleOCR
@@ -6,6 +6,10 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from PIL import Image
+import numpy as np
+
+# Allow very large PDFs, but we’ll downscale ourselves
+Image.MAX_IMAGE_PIXELS = None
 
 app = Flask(__name__)
 ocr = PaddleOCR(use_angle_cls=True, lang='en')  # GPU arg removed
@@ -74,6 +78,19 @@ def median(nums):
     s = sorted(nums)
     n = len(s)
     return (s[n//2] if n % 2 == 1 else (s[n//2-1] + s[n//2]) / 2)
+
+
+def clamp_image(pil_img, max_pixels=60_000_000, max_side=4000):
+    w, h = pil_img.size
+    if w * h <= max_pixels and max(w, h) <= max_side:
+        return pil_img
+    # scale to satisfy both constraints
+    from math import sqrt
+    sf1 = sqrt(max_pixels / float(w * h))    # pixel budget
+    sf2 = max_side / float(max(w, h))        # longest side
+    sf = min(sf1, sf2, 1.0)
+    new_w, new_h = max(1, int(w * sf)), max(1, int(h * sf))
+    return pil_img.resize((new_w, new_h), Image.LANCZOS)
 
 # ---------------- Column detection ----------------
 def split_columns(line_items, page_width):
@@ -199,8 +216,9 @@ def classify_block(lines_in_block, medH):
 
 # ---------------- Core: convert a single page image to DOCX content ----------------
 def convert_page_to_docx(image, doc: Document):
-    # OCR
-    res = ocr.ocr(image, cls=True)
+    img_small = clamp_image(image)        # downscale if needed
+    res = ocr.ocr(np.array(img_small))    # newer paddleocr: no cls kwarg
+    
     if not res or not res[0]:
         return
 
