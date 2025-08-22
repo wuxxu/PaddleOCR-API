@@ -2,8 +2,7 @@ FROM python:3.10-slim
 
 # + poppler-utils so we have `pdftoppm` for PDF -> images
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    poppler-utils \
-    libglib2.0-0 libsm6 libxrender1 libxext6 \
+    libglib2.0-0 libsm6 libxrender1 libxext6 libgomp1 poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
