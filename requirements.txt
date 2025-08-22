@@ -18,3 +18,8 @@ fastapi
 loguru
 uvicorn
 python-multipart
+
+flask
+paddleocr
+paddlepaddle
+gunicorn
