@@ -1,18 +1,27 @@
-import os
-import re
+import os, threading, io
 from flask import Flask, request, send_file, jsonify
 from pdf2image import convert_from_path
 from paddleocr import PaddleOCR
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from PIL import Image
 
-# ---------------- App & OCR ----------------
 app = Flask(__name__)
+ocr = PaddleOCR(use_angle_cls=True, lang='en')  # GPU arg removed
 
-# IMPORTANT:
-# - Don't pass use_gpu (newer paddleocr auto-detects); set lang to 'en' for Latin scripts
-ocr = PaddleOCR(use_angle_cls=True, lang='en')
+# ---- OPTIONAL: warm up at startup (tiny image) ----
+def _warmup():
+    try:
+        img = Image.new("RGB", (32, 32), "white")
+        buf = "/tmp/warm.png"
+        img.save(buf, "PNG")
+        _ = ocr.ocr(buf, cls=True)
+        print("Warmup OCR done")
+    except Exception as e:
+        print("Warmup failed:", e)
+
+threading.Thread(target=_warmup, daemon=True).start()
 
 # ---------------- Small helpers ----------------
 def single_space(s: str) -> str:
@@ -312,31 +321,41 @@ def health():
 
 @app.route("/pdf-to-docx", methods=["POST"])
 def pdf_to_docx():
-    # Validate file
     if "file" not in request.files:
         return jsonify({"error": "send multipart/form-data with field 'file' (PDF)"}), 400
     f = request.files["file"]
     if not f.filename.lower().endswith(".pdf"):
         return jsonify({"error": "please upload a PDF"}), 400
 
-    # Optional DPI for rasterization (default 300)
+    # Controls to keep under timeout
     try:
         dpi = int(request.args.get("dpi", "300"))
     except Exception:
         dpi = 300
-    if dpi not in (300, 350, 400):
-        dpi = 300
+    dpi = 300 if dpi not in (300, 350, 400) else dpi
 
-    # Save, rasterize, OCR, build DOCX
+    # Limit pages for speed (especially on first run)
+    # Usage: ?first=1&last=2  -> only first two pages
+    first = request.args.get("first")
+    last  = request.args.get("last")
+    first_page = int(first) if first and first.isdigit() else None
+    last_page  = int(last)  if last  and last.isdigit()  else None
+
     input_path = "/tmp/input.pdf"
     output_path = "/tmp/output.docx"
     f.save(input_path)
 
     try:
-        # pdf2image uses poppler's pdftoppm (we installed poppler-utils in Dockerfile)
-        images = convert_from_path(input_path, dpi=dpi)
+        if first_page or last_page:
+            kw = {}
+            if first_page: kw["first_page"] = first_page
+            if last_page:  kw["last_page"]  = last_page
+            images = convert_from_path(input_path, dpi=dpi, **kw)
+        else:
+            images = convert_from_path(input_path, dpi=dpi)
     except Exception as e:
         return jsonify({"error": f"PDF rasterization failed: {e}"}), 500
+
 
     doc = Document()
 
