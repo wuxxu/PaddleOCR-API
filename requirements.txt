@@ -1,9 +1,7 @@
 flask
-paddleocr
 paddlepaddle
-opencv-python-headless
-numpy
-Pillow
-python-docx
-openpyxl
-gunicorn
+paddleocr
+opencv-python
+scikit-image
+shapely
+PyYAML
