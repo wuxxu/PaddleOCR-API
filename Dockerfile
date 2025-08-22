@@ -1,19 +1,27 @@
 FROM python:3.10-slim
 
-# + poppler-utils so we have `pdftoppm` for PDF -> images
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libsm6 libxrender1 libxext6 libgomp1 libgl1 poppler-utils \
+# Install system dependencies (needed for paddle + opencv)
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1 \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PIP_NO_CACHE_DIR=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
+# Set workdir
 WORKDIR /app
-COPY requirements.txt /app/
-RUN pip install --upgrade pip && pip install -r requirements.txt
-COPY . /app
 
-ENV PORT=5000
+# Copy files
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Expose port
 EXPOSE 5000
-CMD ["python", "app.py"]
+
+# Start with gunicorn (production WSGI server)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
