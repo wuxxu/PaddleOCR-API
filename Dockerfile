@@ -1,25 +1,34 @@
 FROM python:3.10-slim
 
-# deps incl. poppler for pdf2image
+# System deps: poppler for pdf2image + minimal libs for cv/paddle
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    poppler-utils libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1 gcc g++ \
+    poppler-utils libglib2.0-0 libsm6 libxext6 libxrender1 libgl1 gcc g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Keep libraries from spawning many threads (saves RAM)
+ENV OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
-COPY requirements.txt requirements.txt
+
+# Python deps
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- PRELOAD PADDLEOCR MODELS DURING BUILD (no cold-start) ---
-# This downloads the 'en' detection/recognition models into the image layer.
+# Preload PaddleOCR models into the image to avoid cold-start timeouts
 RUN python - <<'PY'
 from paddleocr import PaddleOCR
-# This line triggers model download & caches inside the image
 PaddleOCR(use_angle_cls=True, lang='en')
-print("PaddleOCR models preloaded.")
+print("✅ PaddleOCR models preloaded.")
 PY
 
+# App code
 COPY . .
+
 EXPOSE 5000
 
-# increase worker timeout so heavy PDFs don’t kill the worker prematurely
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "app:app"]
+# Single worker to keep memory predictable; generous timeouts
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "--timeout", "600", "--graceful-timeout", "120", "app:app"]
