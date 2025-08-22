@@ -9,7 +9,7 @@ import tempfile, os, subprocess, re
 app = Flask(__name__)
 
 # Load OCR once (CPU)
-ocr = PaddleOCR(use_angle_cls=True, lang='latin', use_gpu=False)
+ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
 
 @app.get("/")
 def health():
